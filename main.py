@@ -80,6 +80,7 @@ def get_baku_ada_data():
 
 origins = [
     "http://localhost:3000",
+    "https://ada-ca8dbde28-aqillous.vercel.app/",
     "http://localhost:5173",
     os.getenv("FRONTEND_URL")
 ]
