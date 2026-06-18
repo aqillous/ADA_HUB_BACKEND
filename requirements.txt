@@ -7,3 +7,6 @@ protobuf==7.35.1
 pydantic==2.13.4
 python-dotenv==1.2.2
 SQLAlchemy==2.0.51
+alembic==1.13.1
+uvicorn==0.30.0
+psycopg2-binary==2.9.9
