@@ -15,9 +15,6 @@ import json
 import os
 
 
-
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI(title="ADA Hub User Auth API")
 
 SPREADSHEET_NAME = "NTT Azerbaijan | 26.27 "
