@@ -99,7 +99,16 @@ def add_news(db:Session , news_header:str , news_content:str , news_short:str= "
     db.add(new_news)
     db.commit()
     db.refresh(new_news)
-    return {"status": "success", "news": {"id": new_news.id, "news_header": new_news.news_header, "news_content": new_news.news_content}}
+    return {
+    "status": "success",
+    "news": {
+        "id": new_news.id,
+        "news_header": new_news.news_header,
+        "news_short": new_news.news_short,
+        "news_content": new_news.news_content,
+        "created_at": new_news.created_at
+        }
+    }   
     
 def all_news(db:Session):
     return db.query(News).all()

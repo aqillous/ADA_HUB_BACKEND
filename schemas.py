@@ -36,13 +36,19 @@ class AllCalendarEventsResponse(BaseModel):
     event_name:str
 
 class AddNewsRequest(BaseModel):
-    news_header:str
-    news_content:str
+    news_header: str
+    news_short: str | None = None
+    news_content: str
 
 class AllNewsResponse(BaseModel):
-    id:int
-    news_header:str
-    news_content:str
+    id: int
+    news_header: str
+    news_short: str | None = None
+    news_content: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 class OrderItemSchema(BaseModel):

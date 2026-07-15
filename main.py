@@ -80,7 +80,7 @@ def get_baku_ada_data():
 
 origins = [
     "http://localhost:3000",
-    "https://ada-ca8dbde28-aqillous.vercel.app/",
+    # "https://ada-ca8dbde28-aqillous.vercel.app/",
     "http://localhost:5173",
     os.getenv("FRONTEND_URL")
 ]
@@ -159,8 +159,17 @@ def editCalendarEvent(id:int , request:CalendarEventRequest , admin= Depends(get
     return edit_calendar_event(db , id , request.event_name ,request.event_date , request.event_time)
 
 @app.post("/admin/news")
-def addNews(request:AddNewsRequest , db:Session = Depends(get_db) , admin=Depends(get_current_admin)):
-    return add_news(db , request.news_header , request.news_content)
+def addNews(
+    request:AddNewsRequest,
+    db:Session=Depends(get_db),
+    admin=Depends(get_current_admin)
+):
+    return add_news(
+        db,
+        request.news_header,
+        request.news_content,
+        request.news_short
+    )
 
 @app.get("/allNews" , response_model=List[AllNewsResponse])
 def getAllNews(db:Session=Depends(get_db)):
