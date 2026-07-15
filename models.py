@@ -10,16 +10,32 @@ class OrderStatus(str, enum.Enum):
     delivered = "delivered"
     cancelled = "cancelled"
 
+class PositionEnum(str, enum.Enum):
+    igv_member = "iGV Member"
+    igv_tl = "iGV Team Leader"
+    ogv_member = "OGV Member"
+    ogv_tl = "OGV Team Leader"
+    lcvp = "LCVP"
+    lcp = "LCP"
+    alumnus = "Alumni"
+
 class User(Base):
     __tablename__ = "users"
+
     id = Column(Integer, primary_key=True)
     email = Column(String , nullable=False)
     hashed_password = Column(String , nullable=False)
     is_admin = Column(Boolean, default=False)
-    name = Column(String, nullable=True)           # new
-    surname = Column(String, nullable=True)        # new
-    current_position = Column(String, nullable=True)  # new
-    created_at = Column(DateTime , default=datetime.utcnow)
+
+    name = Column(String, nullable=True)
+    surname = Column(String, nullable=True)
+
+    current_position = Column(
+        Enum(PositionEnum),
+        nullable=True
+    )
+
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     orders = relationship("Order", back_populates="user")
 
@@ -85,3 +101,28 @@ class VP(Base):
     position = Column(String, nullable=False)
     image_url = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class MaterialFolder(Base):
+    __tablename__ = "material_folders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    allowed_positions = Column(String, nullable=False, default="")  # comma-separated PositionEnum values
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    files = relationship("MaterialFile", back_populates="folder", cascade="all, delete-orphan")
+
+
+class MaterialFile(Base):
+    __tablename__ = "material_files"
+
+    id = Column(Integer, primary_key=True, index=True)
+    folder_id = Column(Integer, ForeignKey("material_folders.id"))
+    name = Column(String, nullable=False)
+    file_url = Column(String, nullable=False)
+    file_type = Column(String, nullable=True)   # pdf, docx, google_doc, google_sheet, google_slide, link
+    source = Column(String, nullable=False, default="upload")  # "upload" or "link"
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
+
+    folder = relationship("MaterialFolder", back_populates="files")

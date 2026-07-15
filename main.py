@@ -10,7 +10,7 @@ import models
 import gspread
 from google.oauth2.service_account import Credentials
 from authentication import *
-from utils import upload_to_cloudinary
+from utils import upload_to_cloudinary , upload_file_to_cloudinary
 import json
 import os
 
@@ -103,7 +103,14 @@ def get_db():
 
 @app.post("/register", response_model=dict)
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
-    result = register_user(db, request.email, request.password)
+    result = register_user(
+    db,
+    request.email,
+    request.password,
+    False,
+    request.name,
+    request.surname
+)
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
     return result
@@ -292,7 +299,20 @@ def getMe(user=Depends(get_current_user), db: Session = Depends(get_db)):
 @app.patch("/profile")
 def updateProfile(request: UpdateProfileRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
     user_id = int(user.get("sub"))
-    result = update_profile(db, user_id, request.name, request.surname, request.current_position)
+    result = update_profile(db, user_id, request.name, request.surname)
+    if result["status"] == "error":
+        raise HTTPException(status_code=404, detail=result["message"])
+    return result
+
+
+@app.patch("/users/{id}/position")
+def changeUserPosition(
+    id: int,
+    request: UpdateUserPositionRequest,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    result = update_user_position(db, id, request.current_position)
     if result["status"] == "error":
         raise HTTPException(status_code=404, detail=result["message"])
     return result
@@ -359,6 +379,76 @@ async def editVP(
 def deleteVP(id: int, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
     result = delete_vp(db, id)
     if result["status"] == "error":
+        raise HTTPException(status_code=404, detail=result["message"])
+    return result
+
+@app.patch("/users/{id}/position")
+def updateUserPosition(
+    id:int,
+    request:UpdateUserPositionRequest,
+    admin=Depends(get_current_admin),
+    db:Session=Depends(get_db)
+):
+
+    user = db.query(models.User).filter(
+        models.User.id == id
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    user.current_position = request.current_position
+
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "status":"success"
+    }
+
+@app.get("/materials")
+def getMaterials(user=Depends(get_current_user), db: Session = Depends(get_db)):
+    me = db.query(models.User).filter(models.User.id == int(user["sub"])).first()
+    if not me or not me.current_position:
+        raise HTTPException(status_code=403, detail="No position assigned")
+    return get_materials_for_position(db, me.current_position)
+
+@app.get("/admin/materials/folders")
+def adminGetFolders(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    return get_all_folders_admin(db)
+
+@app.post("/admin/materials/folders")
+def adminAddFolder(request: MaterialFolderCreate, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    return add_material_folder(db, request.name, request.description, request.allowed_positions)
+
+@app.patch("/admin/materials/folders/{id}")
+def adminEditFolder(id: int, request: MaterialFolderCreate, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    return edit_material_folder(db, id, request.name, request.description, request.allowed_positions)
+
+@app.delete("/admin/materials/folders/{id}")
+def adminDeleteFolder(id: int, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    return delete_material_folder(db, id)
+
+@app.post("/admin/materials/folders/{id}/files")
+async def adminAddFile(id: int, file: UploadFile, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    try:
+        file_url = upload_file_to_cloudinary(file)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Upload failed: {str(e)}")
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else ""
+    return add_material_file(db, id, file.filename, file_url, ext)
+
+@app.delete("/admin/materials/files/{id}")
+def adminDeleteFile(id: int, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    return delete_material_file(db, id)
+
+@app.post("/admin/materials/folders/{id}/links")
+def adminAddLink(id: int, request: MaterialLinkCreate, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    result = add_material_link(db, id, request.name, request.url)
+    if result.get("status") == "error":
         raise HTTPException(status_code=404, detail=result["message"])
     return result
 

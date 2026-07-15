@@ -6,13 +6,26 @@ from authentication import  *
 from datetime import date , time , timedelta , datetime
 from fastapi import HTTPException
 
-def register_user(db: Session, email: str, password: str, is_admin: bool = False):
+def register_user(
+    db: Session,
+    email: str,
+    password: str,
+    is_admin: bool = False,
+    name: str = "",
+    surname: str = ""
+):
     existing_user = db.query(User).filter(User.email == email).first()
     if existing_user:
         return {"status": "error", "message": "existing user"}
 
     hashed_pw = hash_password(password)
-    new_user = User(email=email, hashed_password=hashed_pw, is_admin=is_admin)
+    new_user = User(
+        email=email,
+        hashed_password=hashed_pw,
+        is_admin=is_admin,
+        name=name,
+        surname=surname
+    )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -360,20 +373,29 @@ def get_me(db: Session, user_id: int):
         "email": user.email,
         "name": user.name or "",
         "surname": user.surname or "",
-        "current_position": user.current_position or "",
+        "current_position": user.current_position.value if user.current_position else "",
         "is_admin": user.is_admin,
     }
 
-def update_profile(db: Session, user_id: int, name: str, surname: str, current_position: str):
+def update_profile(db: Session, user_id: int, name: str, surname: str):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return {"status": "error", "message": "user not found"}
     user.name = name
     user.surname = surname
-    user.current_position = current_position
     db.commit()
     db.refresh(user)
     return {"status": "success"}
+
+
+def update_user_position(db: Session, user_id: int, position: str):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"status": "error", "message": "user not found"}
+    user.current_position = position
+    db.commit()
+    db.refresh(user)
+    return {"status": "success", "current_position": user.current_position}
 
 def change_password(db: Session, user_id: int, current_password: str, new_password: str):
     user = db.query(User).filter(User.id == user_id).first()
@@ -424,3 +446,114 @@ def delete_vp(db: Session, vp_id: int):
     db.delete(vp)
     db.commit()
     return {"status": "success"}
+
+def folder_to_dict(f):
+    positions = [p.strip() for p in (f.allowed_positions or "").split(",") if p.strip()]
+    return {
+        "id": f.id,
+        "name": f.name,
+        "description": f.description,
+        "allowed_positions": positions,
+        "files": [
+            {
+                "id": file.id,
+                "name": file.name,
+                "file_url": file.file_url,
+                "file_type": file.file_type,
+                "source": file.source,
+                "uploaded_at": file.uploaded_at,
+            }
+            for file in f.files
+        ],
+    }
+
+def get_all_folders_admin(db: Session):
+    folders = db.query(MaterialFolder).order_by(MaterialFolder.created_at.desc()).all()
+    return [folder_to_dict(f) for f in folders]
+
+def get_materials_for_position(db: Session, position: str):
+    folders = db.query(MaterialFolder).order_by(MaterialFolder.name.asc()).all()
+    return [
+        folder_to_dict(f)
+        for f in folders
+        if position in [p.strip() for p in (f.allowed_positions or "").split(",") if p.strip()]
+    ]
+
+def add_material_folder(db, name, description, allowed_positions):
+    folder = MaterialFolder(name=name, description=description, allowed_positions=",".join(allowed_positions))
+    db.add(folder)
+    db.commit()
+    db.refresh(folder)
+    return folder_to_dict(folder)
+
+def edit_material_folder(db, folder_id, name, description, allowed_positions):
+    folder = db.query(MaterialFolder).filter(MaterialFolder.id == folder_id).first()
+    if not folder:
+        return {"status": "error", "message": "Folder not found"}
+    folder.name = name
+    folder.description = description
+    folder.allowed_positions = ",".join(allowed_positions)
+    db.commit()
+    db.refresh(folder)
+    return folder_to_dict(folder)
+
+def delete_material_folder(db, folder_id):
+    folder = db.query(MaterialFolder).filter(MaterialFolder.id == folder_id).first()
+    if not folder:
+        return {"status": "error", "message": "Folder not found"}
+    db.delete(folder)
+    db.commit()
+    return {"status": "success"}
+
+def add_material_file(db, folder_id, name, file_url, file_type):
+    folder = db.query(MaterialFolder).filter(MaterialFolder.id == folder_id).first()
+    if not folder:
+        return {"status": "error", "message": "Folder not found"}
+    file = MaterialFile(folder_id=folder_id, name=name, file_url=file_url, file_type=file_type)
+    db.add(file)
+    db.commit()
+    db.refresh(file)
+    return {
+        "id": file.id,
+        "name": file.name,
+        "file_url": file.file_url,
+        "file_type": file.file_type,
+        "uploaded_at": file.uploaded_at,
+    }
+
+def detect_link_type(url: str) -> str:
+    url = url.lower()
+    if "docs.google.com/document" in url:
+        return "google_doc"
+    if "docs.google.com/spreadsheets" in url:
+        return "google_sheet"
+    if "docs.google.com/presentation" in url:
+        return "google_slide"
+    if "drive.google.com" in url:
+        return "google_drive"
+    return "link"
+
+def add_material_link(db, folder_id, name, url):
+    folder = db.query(MaterialFolder).filter(MaterialFolder.id == folder_id).first()
+    if not folder:
+        return {"status": "error", "message": "Folder not found"}
+
+    file_type = detect_link_type(url)
+    file = MaterialFile(
+        folder_id=folder_id,
+        name=name,
+        file_url=url,
+        file_type=file_type,
+        source="link",
+    )
+    db.add(file)
+    db.commit()
+    db.refresh(file)
+    return {
+        "id": file.id,
+        "name": file.name,
+        "file_url": file.file_url,
+        "file_type": file.file_type,
+        "source": file.source,
+        "uploaded_at": file.uploaded_at,
+    }

@@ -1,11 +1,13 @@
 from pydantic import BaseModel
 from datetime import date , time , datetime
 from typing import List
-from models import OrderStatus
+from models import OrderStatus , PositionEnum
 
 class RegisterRequest(BaseModel):
-    email:str
-    password:str
+    email: str
+    password: str
+    name: str
+    surname: str
 
 class LoginRequest(BaseModel):
     email:str
@@ -15,14 +17,20 @@ class AllUsersResponse(BaseModel):
     id:int
     email:str
     is_admin:bool
+    name:str | None = None
+    surname:str | None = None
+    current_position: PositionEnum | None = None
 
     class Config:
-        from_attributes : True
+        from_attributes = True
 
 class AddUserRequest(BaseModel):
     email:str
     password:str
     is_admin:bool
+
+class UpdateUserPositionRequest(BaseModel):
+    current_position: PositionEnum
 
 class CalendarEventRequest(BaseModel):
     event_date:date
@@ -61,7 +69,7 @@ class OrderSchema(BaseModel):
 class ProductOut(BaseModel):
     id: int
     name: str
-    price: int
+    price: float
     image_url: str | None = None
 
     class Config:
@@ -83,13 +91,13 @@ class UserOut(BaseModel):
     surname: str | None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class OrderOut(BaseModel):
     id: int
     user: UserOut | None
-    status: str
+    status: OrderStatus
     total_amount: float
     created_at: datetime
     items: List[OrderItemOut]
@@ -106,8 +114,38 @@ class RefreshTokenRequest(BaseModel):
 class UpdateProfileRequest(BaseModel):
     name: str
     surname: str
-    current_position: str
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+class MaterialFolderCreate(BaseModel):
+    name: str
+    description: str | None = None
+    allowed_positions: List[str]
+
+class MaterialFileOut(BaseModel):
+    id: int
+    name: str
+    file_url: str
+    file_type: str | None = None
+    uploaded_at: datetime
+
+class MaterialFolderOut(BaseModel):
+    id: int
+    name: str
+    description: str | None = None
+    allowed_positions: List[str]
+    files: List[MaterialFileOut] = []
+
+class MaterialLinkCreate(BaseModel):
+    name: str
+    url: str
+
+class MaterialFileOut(BaseModel):
+    id: int
+    name: str
+    file_url: str
+    file_type: str | None = None
+    source: str
+    uploaded_at: datetime
