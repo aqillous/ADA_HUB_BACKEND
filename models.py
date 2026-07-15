@@ -30,10 +30,7 @@ class User(Base):
     name = Column(String, nullable=True)
     surname = Column(String, nullable=True)
 
-    current_position = Column(
-        Enum(PositionEnum),
-        nullable=True
-    )
+    current_position = Column(String, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 

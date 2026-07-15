@@ -382,32 +382,6 @@ def deleteVP(id: int, admin=Depends(get_current_admin), db: Session = Depends(ge
         raise HTTPException(status_code=404, detail=result["message"])
     return result
 
-@app.patch("/users/{id}/position")
-def updateUserPosition(
-    id:int,
-    request:UpdateUserPositionRequest,
-    admin=Depends(get_current_admin),
-    db:Session=Depends(get_db)
-):
-
-    user = db.query(models.User).filter(
-        models.User.id == id
-    ).first()
-
-    if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
-
-    user.current_position = request.current_position
-
-    db.commit()
-    db.refresh(user)
-
-    return {
-        "status":"success"
-    }
 
 @app.get("/materials")
 def getMaterials(user=Depends(get_current_user), db: Session = Depends(get_db)):

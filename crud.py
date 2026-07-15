@@ -373,7 +373,7 @@ def get_me(db: Session, user_id: int):
         "email": user.email,
         "name": user.name or "",
         "surname": user.surname or "",
-        "current_position": user.current_position.value if user.current_position else "",
+        "current_position": user.current_position or "",   # plain string now, no .value
         "is_admin": user.is_admin,
     }
 

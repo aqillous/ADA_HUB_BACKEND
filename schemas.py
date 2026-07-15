@@ -14,23 +14,23 @@ class LoginRequest(BaseModel):
     password:str
 
 class AllUsersResponse(BaseModel):
-    id:int
-    email:str
-    is_admin:bool
-    name:str | None = None
-    surname:str | None = None
-    current_position: PositionEnum | None = None
+    id: int
+    email: str
+    is_admin: bool
+    name: str | None = None
+    surname: str | None = None
+    current_position: str | None = None   # was PositionEnum | None
 
     class Config:
         from_attributes = True
+
+class UpdateUserPositionRequest(BaseModel):
+    current_position: str
 
 class AddUserRequest(BaseModel):
     email:str
     password:str
     is_admin:bool
-
-class UpdateUserPositionRequest(BaseModel):
-    current_position: PositionEnum
 
 class CalendarEventRequest(BaseModel):
     event_date:date
