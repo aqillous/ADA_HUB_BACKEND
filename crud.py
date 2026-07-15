@@ -557,3 +557,11 @@ def add_material_link(db, folder_id, name, url):
         "source": file.source,
         "uploaded_at": file.uploaded_at,
     }
+
+def delete_material_file(db, file_id):
+    file = db.query(MaterialFile).filter(MaterialFile.id == file_id).first()
+    if not file:
+        return {"status": "error", "message": "File not found"}
+    db.delete(file)
+    db.commit()
+    return {"status": "success"}
