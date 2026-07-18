@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import date , time , datetime
-from typing import List
+from typing import List, Optional
 from models import OrderStatus , PositionEnum
 
 class RegisterRequest(BaseModel):
@@ -119,28 +119,19 @@ class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
 
+
+# ---------------------------------------------------------------------------
+# Materials
+# ---------------------------------------------------------------------------
+
 class MaterialFolderCreate(BaseModel):
     name: str
     description: str | None = None
-    allowed_positions: List[str]
-
-class MaterialFileOut(BaseModel):
-    id: int
-    name: str
-    file_url: str
-    file_type: str | None = None
-    uploaded_at: datetime
-
-class MaterialFolderOut(BaseModel):
-    id: int
-    name: str
-    description: str | None = None
-    allowed_positions: List[str]
-    files: List[MaterialFileOut] = []
-
-class MaterialLinkCreate(BaseModel):
-    name: str
-    url: str
+    allowed_positions: List[str] = []
+    allowed_emails: List[str] = []          # NEW — e.g. ["aqillous@gmail.com"]
+    color: str = "blue"                     # NEW
+    icon: str = "folder"                    # NEW
+    parent_id: Optional[int] = None         # NEW — set to nest inside another folder
 
 class MaterialFileOut(BaseModel):
     id: int
@@ -149,3 +140,21 @@ class MaterialFileOut(BaseModel):
     file_type: str | None = None
     source: str
     uploaded_at: datetime
+
+class MaterialFolderOut(BaseModel):
+    id: int
+    parent_id: Optional[int] = None
+    name: str
+    description: str | None = None
+    allowed_positions: List[str]
+    allowed_emails: List[str]
+    color: str
+    icon: str
+    files: List[MaterialFileOut] = []
+    subfolders: List["MaterialFolderOut"] = []
+
+MaterialFolderOut.model_rebuild()
+
+class MaterialLinkCreate(BaseModel):
+    name: str
+    url: str

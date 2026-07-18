@@ -383,12 +383,23 @@ def deleteVP(id: int, admin=Depends(get_current_admin), db: Session = Depends(ge
     return result
 
 
+# ---------------------------------------------------------------------------
+# Materials — member side: access is by position OR by email, no hard gate
+# ---------------------------------------------------------------------------
+
 @app.get("/materials")
 def getMaterials(user=Depends(get_current_user), db: Session = Depends(get_db)):
     me = db.query(models.User).filter(models.User.id == int(user["sub"])).first()
-    if not me or not me.current_position:
-        raise HTTPException(status_code=403, detail="No position assigned")
-    return get_materials_for_position(db, me.current_position)
+    if not me:
+        raise HTTPException(status_code=404, detail="User not found")
+    # NOTE: no longer requires current_position — an admin can grant access
+    # purely by email even if the user has no position assigned.
+    return get_materials_for_user(db, me.current_position or "", me.email)
+
+
+# ---------------------------------------------------------------------------
+# Materials — admin side: full tree, nested folders, appearance, email access
+# ---------------------------------------------------------------------------
 
 @app.get("/admin/materials/folders")
 def adminGetFolders(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
@@ -396,11 +407,36 @@ def adminGetFolders(admin=Depends(get_current_admin), db: Session = Depends(get_
 
 @app.post("/admin/materials/folders")
 def adminAddFolder(request: MaterialFolderCreate, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
-    return add_material_folder(db, request.name, request.description, request.allowed_positions)
+    result = add_material_folder(
+        db,
+        request.name,
+        request.description,
+        request.allowed_positions,
+        request.allowed_emails,
+        request.color,
+        request.icon,
+        request.parent_id,
+    )
+    if isinstance(result, dict) and result.get("status") == "error":
+        raise HTTPException(status_code=404, detail=result["message"])
+    return result
 
 @app.patch("/admin/materials/folders/{id}")
 def adminEditFolder(id: int, request: MaterialFolderCreate, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
-    return edit_material_folder(db, id, request.name, request.description, request.allowed_positions)
+    result = edit_material_folder(
+        db,
+        id,
+        request.name,
+        request.description,
+        request.allowed_positions,
+        request.allowed_emails,
+        request.color,
+        request.icon,
+        request.parent_id,
+    )
+    if result.get("status") == "error":
+        raise HTTPException(status_code=404, detail=result["message"])
+    return result
 
 @app.delete("/admin/materials/folders/{id}")
 def adminDeleteFolder(id: int, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
@@ -425,4 +461,3 @@ def adminAddLink(id: int, request: MaterialLinkCreate, admin=Depends(get_current
     if result.get("status") == "error":
         raise HTTPException(status_code=404, detail=result["message"])
     return result
-

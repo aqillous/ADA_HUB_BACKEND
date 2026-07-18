@@ -447,13 +447,26 @@ def delete_vp(db: Session, vp_id: int):
     db.commit()
     return {"status": "success"}
 
+
+# ---------------------------------------------------------------------------
+# Materials — nested folders, role + email access, appearance, Canva links
+# ---------------------------------------------------------------------------
+
+def _split_csv(value: str):
+    return [v.strip() for v in (value or "").split(",") if v.strip()]
+
+
 def folder_to_dict(f):
-    positions = [p.strip() for p in (f.allowed_positions or "").split(",") if p.strip()]
+    """Shallow dict for a single folder (no recursion into subfolders)."""
     return {
         "id": f.id,
+        "parent_id": f.parent_id,
         "name": f.name,
         "description": f.description,
-        "allowed_positions": positions,
+        "allowed_positions": _split_csv(f.allowed_positions),
+        "allowed_emails": _split_csv(f.allowed_emails),
+        "color": f.color or "blue",
+        "icon": f.icon or "folder",
         "files": [
             {
                 "id": file.id,
@@ -467,43 +480,108 @@ def folder_to_dict(f):
         ],
     }
 
+
+def _folder_tree_dict(folder, children_by_parent):
+    """Recursively build a folder dict with a nested `subfolders` list."""
+    d = folder_to_dict(folder)
+    children = children_by_parent.get(folder.id, [])
+    d["subfolders"] = [_folder_tree_dict(c, children_by_parent) for c in children]
+    return d
+
+
+def _build_children_index(all_folders):
+    index = {}
+    for f in all_folders:
+        index.setdefault(f.parent_id, []).append(f)
+    for lst in index.values():
+        lst.sort(key=lambda x: x.name.lower())
+    return index
+
+
 def get_all_folders_admin(db: Session):
-    folders = db.query(MaterialFolder).order_by(MaterialFolder.created_at.desc()).all()
-    return [folder_to_dict(f) for f in folders]
+    """Full folder tree, regardless of access — for the admin panel."""
+    all_folders = db.query(MaterialFolder).all()
+    children_by_parent = _build_children_index(all_folders)
+    roots = children_by_parent.get(None, [])
+    return [_folder_tree_dict(f, children_by_parent) for f in roots]
 
-def get_materials_for_position(db: Session, position: str):
-    folders = db.query(MaterialFolder).order_by(MaterialFolder.name.asc()).all()
-    return [
-        folder_to_dict(f)
-        for f in folders
-        if position in [p.strip() for p in (f.allowed_positions or "").split(",") if p.strip()]
-    ]
 
-def add_material_folder(db, name, description, allowed_positions):
-    folder = MaterialFolder(name=name, description=description, allowed_positions=",".join(allowed_positions))
+def get_materials_for_user(db: Session, position: str, email: str):
+    """
+    Folder tree filtered for a specific member.
+    A ROOT folder is visible if the member's position OR email matches it.
+    Once a root folder is visible, all of its nested subfolders/files are
+    visible too (permissions are only set on the top-level folder).
+    """
+    all_folders = db.query(MaterialFolder).all()
+    children_by_parent = _build_children_index(all_folders)
+    roots = children_by_parent.get(None, [])
+
+    email_norm = (email or "").strip().lower()
+
+    def has_access(f):
+        positions = _split_csv(f.allowed_positions)
+        emails = [e.lower() for e in _split_csv(f.allowed_emails)]
+        return (position and position in positions) or (email_norm and email_norm in emails)
+
+    visible_roots = [f for f in roots if has_access(f)]
+    return [_folder_tree_dict(f, children_by_parent) for f in visible_roots]
+
+
+def add_material_folder(db, name, description, allowed_positions, allowed_emails=None,
+                         color="blue", icon="folder", parent_id=None):
+    if parent_id is not None:
+        parent = db.query(MaterialFolder).filter(MaterialFolder.id == parent_id).first()
+        if not parent:
+            return {"status": "error", "message": "Parent folder not found"}
+
+    folder = MaterialFolder(
+        name=name,
+        description=description,
+        allowed_positions=",".join(allowed_positions or []),
+        allowed_emails=",".join(allowed_emails or []),
+        color=color or "blue",
+        icon=icon or "folder",
+        parent_id=parent_id,
+    )
     db.add(folder)
     db.commit()
     db.refresh(folder)
-    return folder_to_dict(folder)
+    return folder_to_dict(folder) | {"subfolders": []}
 
-def edit_material_folder(db, folder_id, name, description, allowed_positions):
+
+def edit_material_folder(db, folder_id, name, description, allowed_positions,
+                          allowed_emails=None, color=None, icon=None, parent_id=None):
     folder = db.query(MaterialFolder).filter(MaterialFolder.id == folder_id).first()
     if not folder:
         return {"status": "error", "message": "Folder not found"}
+
+    if parent_id is not None and parent_id == folder_id:
+        return {"status": "error", "message": "A folder cannot be its own parent"}
+
     folder.name = name
     folder.description = description
-    folder.allowed_positions = ",".join(allowed_positions)
+    folder.allowed_positions = ",".join(allowed_positions or [])
+    folder.allowed_emails = ",".join(allowed_emails or [])
+    if color:
+        folder.color = color
+    if icon:
+        folder.icon = icon
+    folder.parent_id = parent_id
+
     db.commit()
     db.refresh(folder)
     return folder_to_dict(folder)
+
 
 def delete_material_folder(db, folder_id):
     folder = db.query(MaterialFolder).filter(MaterialFolder.id == folder_id).first()
     if not folder:
         return {"status": "error", "message": "Folder not found"}
-    db.delete(folder)
+    db.delete(folder)  # cascades to children + files
     db.commit()
     return {"status": "success"}
+
 
 def add_material_file(db, folder_id, name, file_url, file_type):
     folder = db.query(MaterialFolder).filter(MaterialFolder.id == folder_id).first()
@@ -521,6 +599,7 @@ def add_material_file(db, folder_id, name, file_url, file_type):
         "uploaded_at": file.uploaded_at,
     }
 
+
 def detect_link_type(url: str) -> str:
     url = url.lower()
     if "docs.google.com/document" in url:
@@ -531,7 +610,10 @@ def detect_link_type(url: str) -> str:
         return "google_slide"
     if "drive.google.com" in url:
         return "google_drive"
+    if "canva.com" in url:
+        return "canva"
     return "link"
+
 
 def add_material_link(db, folder_id, name, url):
     folder = db.query(MaterialFolder).filter(MaterialFolder.id == folder_id).first()
@@ -557,6 +639,7 @@ def add_material_link(db, folder_id, name, url):
         "source": file.source,
         "uploaded_at": file.uploaded_at,
     }
+
 
 def delete_material_file(db, file_id):
     file = db.query(MaterialFile).filter(MaterialFile.id == file_id).first()

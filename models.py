@@ -1,5 +1,5 @@
 from sqlalchemy import Column , Integer , String , Boolean , DateTime, Date , Time , Enum , Float , ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from database import Base
 from datetime import datetime
 import enum
@@ -99,16 +99,41 @@ class VP(Base):
     image_url = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
 class MaterialFolder(Base):
     __tablename__ = "material_folders"
 
     id = Column(Integer, primary_key=True, index=True)
+
+    # NEW: self-referential parent for nested (Google-Drive-style) folders.
+    # NULL parent_id => top-level ("root") folder.
+    parent_id = Column(Integer, ForeignKey("material_folders.id"), nullable=True)
+
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    allowed_positions = Column(String, nullable=False, default="")  # comma-separated PositionEnum values
+
+    # Role-based access (unchanged) — comma-separated PositionEnum values
+    allowed_positions = Column(String, nullable=False, default="")
+
+    # NEW: person-based access — comma-separated email addresses.
+    # A user sees a (root) folder if EITHER their position OR their email matches.
+    allowed_emails = Column(String, nullable=False, default="")
+
+    # NEW: appearance
+    color = Column(String, nullable=False, default="blue")   # key into FOLDER_COLORS on the frontend
+    icon = Column(String, nullable=False, default="folder")  # key into FOLDER_ICONS on the frontend
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     files = relationship("MaterialFile", back_populates="folder", cascade="all, delete-orphan")
+
+    # Self-referential nesting: folder.children / child.parent
+    children = relationship(
+        "MaterialFolder",
+        backref=backref("parent", remote_side=[id]),
+        cascade="all, delete-orphan",
+        single_parent=True,
+    )
 
 
 class MaterialFile(Base):
@@ -118,7 +143,8 @@ class MaterialFile(Base):
     folder_id = Column(Integer, ForeignKey("material_folders.id"))
     name = Column(String, nullable=False)
     file_url = Column(String, nullable=False)
-    file_type = Column(String, nullable=True)   # pdf, docx, google_doc, google_sheet, google_slide, link
+    # pdf, docx, google_doc, google_sheet, google_slide, google_drive, canva, link, ...
+    file_type = Column(String, nullable=True)
     source = Column(String, nullable=False, default="upload")  # "upload" or "link"
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
